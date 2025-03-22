@@ -10,6 +10,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import { BatchWriteItemCommand } from '@aws-sdk/client-dynamodb';
 import { books } from '../seed/books';
 import { generateBatch } from '../shared/util';
+import { access } from 'fs';
 
 export class DistributiveSystemAssignment1Stack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -19,7 +20,7 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
     const booksTable = new dynamodb.Table(this, 'BooksTable', {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       partitionKey: { name: 'ISBN', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'Auther', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'Author', type: dynamodb.AttributeType.STRING },
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       tableName: 'Books',
     });
@@ -47,11 +48,13 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
     //   environment: { TABLE_NAME: booksTable.tableName },
     // });
 
-    // const getBooksLambda = new lambdanode.NodejsFunction(this, 'GetBooksLambda', {
-    //   entry: path.join(__dirname, '../lambdas/getBooks.ts'),
-    //   handler: 'handler',
-    //   environment: { TABLE_NAME: booksTable.tableName },
-    // });
+    const getBooksLambda = new lambdanode.NodejsFunction(this, 'GetBooksLambda', {
+      entry: path.join(__dirname, '../lambdas/getBooksByISBN.ts'),
+      handler: 'handler',
+      environment: { TABLE_NAME: booksTable.tableName },
+      timeout: cdk.Duration.seconds(10),
+      runtime: lambda.Runtime.NODEJS_22_X
+    });
 
     // const updateBookLambda = new lambdanode.NodejsFunction(this, 'UpdateBookLambda', {
     //   entry: path.join(__dirname, '../lambdas/updateBook.ts'),
@@ -67,7 +70,7 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
 
     // // granting permissions
     // booksTable.grantReadWriteData(addBookLambda);
-    // booksTable.grantReadData(getBooksLambda);
+     booksTable.grantReadData(getBooksLambda);
     // booksTable.grantReadWriteData(updateBookLambda);
     // booksTable.grantReadWriteData(translateBookLambda);
     // translateBookLambda.addToRolePolicy(new iam.PolicyStatement({
@@ -76,20 +79,20 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
     // }));
 
 
-    // //api gateway implementation 
-    // const api = new apigateway.RestApi(this, 'BooksApi');
+    //api gateway implementation 
+
+    const api = new apigateway.RestApi(this, 'BooksApi');
     // const booksResource = api.root.addResource('books');
     // const authorResource = booksResource.addResource('{author}');
-    // const bookResource = authorResource.addResource('{isbn}');
+    const bookResource = api.root.addResource('{isbn}');
     // const translationResource = bookResource.addResource('translation');
 
 
     // booksResource.addMethod('POST', new apigateway.LambdaIntegration(addBookLambda), {
     //   apiKeyRequired: true,
     // });
-    // authorResource.addMethod('GET', new apigateway.LambdaIntegration(getBooksLambda), {
-    //   requestParameters: { 'method.request.querystring.genre': true },
-    // });
+    bookResource.addMethod('GET', new apigateway.LambdaIntegration(getBooksLambda));
+
     // bookResource.addMethod('PUT', new apigateway.LambdaIntegration(updateBookLambda), {
     //   apiKeyRequired: true,
     // });
@@ -112,7 +115,10 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
     // usagePlan.addApiStage({
     //   stage: api.deploymentStage,
     // });
-
+ new cdk.CfnOutput(this,"output",{
+  value: api.url,
+  description: 'url to access the api gateway'
+ });
 
   }
 }

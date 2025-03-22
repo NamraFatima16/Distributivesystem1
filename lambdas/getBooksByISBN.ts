@@ -4,37 +4,46 @@ import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 
 const ddbDocClient = createDDbDocClient();
 
-export const handler: Handler = async (event, context) => {
+export const handler: Handler = async (event: any, context: any) => {
   try {
     console.log("Retrieving books. Event: ", JSON.stringify(event));
-    const author = event.pathParameters?.author;
-    const genre = event.queryStringParameters?.genre;
+    const isbn = event.pathParameters?.isbn;
 
-    if (!author) {
+    if (!isbn) {
       return {
         statusCode: 400,
         headers: {
           "content-type": "application/json",
         },
-        body: JSON.stringify({ Message: "Missing author path parameter." }),
+        body: JSON.stringify({ Message: "Missing isbn path parameter." }),
       };
     }
 
     let queryParams = {
       TableName: process.env.TABLE_NAME,
-      KeyConditionExpression: "Author = :author",
-      ExpressionAttributeValues: { ":author": author },
+      KeyConditionExpression: "ISBN = :isbn",
+      ExpressionAttributeValues: { ":isbn": isbn }
     };
 
-    if (genre) {
-      queryParams = {
-        ...queryParams,
-        FilterExpression: "Genre = :genre",
-        ExpressionAttributeValues: { ...queryParams.ExpressionAttributeValues, ":genre": genre },
-      };
-    }
+    // if (genre) {
+    //   queryParams = {
+    //     ...queryParams,
+    //     FilterExpression: "Genre = :genre",
+    //     ExpressionAttributeValues: { ...queryParams.ExpressionAttributeValues, ":genre": genre },
+    //   };
+    // }
 
     const commandOutput = await ddbDocClient.send(new QueryCommand(queryParams));
+
+    if (!commandOutput.Items) {
+      return{
+        statusCode: 404,
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ Message: "Invalid book ID" }),
+      };
+      }
 
     return {
       statusCode: 200,
