@@ -18,8 +18,8 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
 
     const booksTable = new dynamodb.Table(this, 'BooksTable', {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      partitionKey: { name: 'Author', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'Genre#Title#ISBN', type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: 'ISBN', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'Auther', type: dynamodb.AttributeType.STRING },
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       tableName: 'Books',
     });
@@ -38,7 +38,6 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
         resources: [booksTable.tableArn],
      })
 
-      
 
     })
 
