@@ -8,7 +8,6 @@ import * as lambda from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as path from 'path';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 
-
 export class DistributiveSystemAssignment1Stack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -44,9 +43,8 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
       })
     });
 
+    //Lambda function integration
 
-
-    //Lambda funtion integration
     const getBooksByGenreFn = new lambda.NodejsFunction(this, 'GetBooksByGenreLambda', {
       entry: path.join(__dirname, '../lambdas/getBooksByGenre.ts'),
       handler: 'handler',
@@ -55,13 +53,26 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
       }
     })
 
+    const addBooksFn = new lambda.NodejsFunction(this, 'AddBooks', {
+      entry: path.join(__dirname, '../lambdas/addBook.ts'),
+      handler: 'handler',
+      environment: {
+        TABLE_NAME: booksTable.tableName
+      }
+    })
 
+    const updateBooksFn = new lambda.NodejsFunction(this, 'UpdateBooks', {
+      entry: path.join(__dirname, '../lambdas/updateBook.ts'),
+      handler: 'handler',
+      environment: {
+        TABLE_NAME: booksTable.tableName
+      }
+    })
 
-    // permissions for lambda funtions
+    // Permissions for lambda functions
     booksTable.grantReadData(getBooksByGenreFn)
-
-
-
+    booksTable.grantReadWriteData(addBooksFn)
+    booksTable.grantReadWriteData(updateBooksFn)
 
     //Api gateway implementation
     const apiGW = new apigateway.RestApi(this, 'BooksApi', {
@@ -80,13 +91,12 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
       apiKeySourceType: apigateway.ApiKeySourceType.HEADER
     });
 
-
     const bookApiKey = new apigateway.ApiKey(this, "addBookApiKey", {
       description: 'Api key for POST and PUT methods to write and update books in DB',
       enabled: true
     })
 
-    const usagePlan = new apigateway.UsagePlan(this, 'BookApiUsagePlan', {
+    const usagePlan  = new apigateway.UsagePlan(this, 'BookApiUsagePlan', {
       name: 'apiUsagePlan',
       description: 'Usage plan for the book API',
       throttle: {
@@ -100,6 +110,7 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
         }
       ]
     });
+
     usagePlan.addApiKey(bookApiKey)
 
     const bookCreateModel: apigateway.Model = apiGW.addModel('BookCreateModel', {
@@ -130,20 +141,41 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
         },
       }
     });
-    
+
     const booksEndpoint = apiGW.root.addResource("books");
     const genreEndpoint = booksEndpoint.addResource("{genre}");
     const isbnEndpoint = genreEndpoint.addResource("{ISBN}");
 
-   
+    booksEndpoint.addMethod(
+      "POST",
+      new apigateway.LambdaIntegration(addBooksFn, {proxy: true}), {
+        "apiKeyRequired": true,
+        requestModels: {
+          "application/json": bookCreateModel,
+        },
+        requestValidatorOptions: {
+          validateRequestBody: true
+        }
+      }
+    );
 
     genreEndpoint.addMethod(
       "GET",
       new apigateway.LambdaIntegration(getBooksByGenreFn, {proxy: true})
     );
 
-
-
+    isbnEndpoint.addMethod(
+      "PUT",
+      new apigateway.LambdaIntegration(updateBooksFn, {proxy: true}), {
+        "apiKeyRequired": true,
+        requestModels: {
+          "application/json": bookUpdateModel,
+        },
+        requestValidatorOptions: {
+          validateRequestBody: true
+        }
+      }
+    );
 
     new cdk.CfnOutput(this, 'BookApiKeyId', {
       value: bookApiKey.keyId,
@@ -151,3 +183,31 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
     });
   }
 }
+
+//     // const translateBookLambda = new lambdanode.NodejsFunction(this, 'TranslateBookLambda', {
+//     //   entry: path.join(__dirname, '../lambdas/translateBook.ts'),
+//     //   handler: 'handler',
+//     //   environment: { TABLE_NAME: booksTable.tableName, REGION: this.region },
+//     // });
+
+//     // // granting permissions
+//     // booksTable.grantReadWriteData(addBookLambda);
+//      booksTable.grantReadData(getBooksLambda);
+//     // booksTable.grantReadWriteData(updateBookLambda);
+//     // booksTable.grantReadWriteData(translateBookLambda);
+//     // translateBookLambda.addToRolePolicy(new iam.PolicyStatement({
+//     //   actions: ['translate:TranslateText'],
+//     //   resources: ['*'],
+//     // }));
+
+
+//     //api gateway implementation 
+
+
+//     // bookResource.addMethod('PUT', new apigateway.LambdaIntegration(updateBookLambda), {
+//     //   apiKeyRequired: true,
+//     // });
+//     // translationResource.addMethod('GET', new apigateway.LambdaIntegration(translateBookLambda), {
+//     //   requestParameters: { 'method.request.querystring.language': true },
+//     // });
+
