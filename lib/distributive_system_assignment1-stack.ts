@@ -81,7 +81,6 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
     });
 
 
-
     const bookApiKey = new apigateway.ApiKey(this, "addBookApiKey", {
       description: 'Api key for POST and PUT methods to write and update books in DB',
       enabled: true
@@ -102,6 +101,48 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
       ]
     });
     usagePlan.addApiKey(bookApiKey)
+
+    const bookCreateModel: apigateway.Model = apiGW.addModel('BookCreateModel', {
+      description: "Schema for Book Table for creating new Books",
+      schema: {
+        type: apigateway.JsonSchemaType.OBJECT,
+        properties: {
+          Genre:  {type: apigateway.JsonSchemaType.STRING},
+          ISBN:   {type: apigateway.JsonSchemaType.STRING},
+          Title:  {type: apigateway.JsonSchemaType.STRING},
+          Author: {type: apigateway.JsonSchemaType.STRING},
+          PublicationYear: {type: apigateway.JsonSchemaType.NUMBER},
+          Description: {type: apigateway.JsonSchemaType.STRING}
+        },
+        required: ['Genre', 'ISBN', 'Description'] 
+      }
+    });
+
+    const bookUpdateModel: apigateway.Model = apiGW.addModel('BookUpdateModel', {
+      description: "Schema for Book Table for updating a book",
+      schema: {
+        type: apigateway.JsonSchemaType.OBJECT,
+        properties: { 
+          Title:  {type: apigateway.JsonSchemaType.STRING},
+          Author: {type: apigateway.JsonSchemaType.STRING},
+          PublicationYear: {type: apigateway.JsonSchemaType.NUMBER},
+          Description: {type: apigateway.JsonSchemaType.STRING}
+        },
+      }
+    });
+    
+    const booksEndpoint = apiGW.root.addResource("books");
+    const genreEndpoint = booksEndpoint.addResource("{genre}");
+    const isbnEndpoint = genreEndpoint.addResource("{ISBN}");
+
+   
+
+    genreEndpoint.addMethod(
+      "GET",
+      new apigateway.LambdaIntegration(getBooksByGenreFn, {proxy: true})
+    );
+
+
 
 
     new cdk.CfnOutput(this, 'BookApiKeyId', {
