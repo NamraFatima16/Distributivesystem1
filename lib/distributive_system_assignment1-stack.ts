@@ -7,7 +7,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as path from 'path';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
-
+import * as iam from 'aws-cdk-lib/aws-iam';
 export class DistributiveSystemAssignment1Stack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -68,11 +68,24 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
         TABLE_NAME: booksTable.tableName
       }
     })
+    const translateBookFn = new lambda.NodejsFunction(this, 'TranslateBook', {
+      entry: path.join(__dirname, '../lambdas/translateBook.ts'),
+      handler: 'handler',
+      environment: {
+        TABLE_NAME: booksTable.tableName,
+        REGION: this.region
+      }
+    });
 
     // Permissions for lambda functions
     booksTable.grantReadData(getBooksByGenreFn)
     booksTable.grantReadWriteData(addBooksFn)
     booksTable.grantReadWriteData(updateBooksFn)
+    booksTable.grantReadWriteData(translateBookFn);
+    translateBookFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['translate:TranslateText'],
+      resources: ['*'],
+    }));
 
     //Api gateway implementation
     const apiGW = new apigateway.RestApi(this, 'BooksApi', {
@@ -96,7 +109,7 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
       enabled: true
     })
 
-    const usagePlan  = new apigateway.UsagePlan(this, 'BookApiUsagePlan', {
+    const usagePlan = new apigateway.UsagePlan(this, 'BookApiUsagePlan', {
       name: 'apiUsagePlan',
       description: 'Usage plan for the book API',
       throttle: {
@@ -118,14 +131,14 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
       schema: {
         type: apigateway.JsonSchemaType.OBJECT,
         properties: {
-          Genre:  {type: apigateway.JsonSchemaType.STRING},
-          ISBN:   {type: apigateway.JsonSchemaType.STRING},
-          Title:  {type: apigateway.JsonSchemaType.STRING},
-          Author: {type: apigateway.JsonSchemaType.STRING},
-          PublicationYear: {type: apigateway.JsonSchemaType.NUMBER},
-          Description: {type: apigateway.JsonSchemaType.STRING}
+          Genre: { type: apigateway.JsonSchemaType.STRING },
+          ISBN: { type: apigateway.JsonSchemaType.STRING },
+          Title: { type: apigateway.JsonSchemaType.STRING },
+          Author: { type: apigateway.JsonSchemaType.STRING },
+          PublicationYear: { type: apigateway.JsonSchemaType.NUMBER },
+          Description: { type: apigateway.JsonSchemaType.STRING }
         },
-        required: ['Genre', 'ISBN', 'Description'] 
+        required: ['Genre', 'ISBN', 'Description']
       }
     });
 
@@ -133,11 +146,11 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
       description: "Schema for Book Table for updating a book",
       schema: {
         type: apigateway.JsonSchemaType.OBJECT,
-        properties: { 
-          Title:  {type: apigateway.JsonSchemaType.STRING},
-          Author: {type: apigateway.JsonSchemaType.STRING},
-          PublicationYear: {type: apigateway.JsonSchemaType.NUMBER},
-          Description: {type: apigateway.JsonSchemaType.STRING}
+        properties: {
+          Title: { type: apigateway.JsonSchemaType.STRING },
+          Author: { type: apigateway.JsonSchemaType.STRING },
+          PublicationYear: { type: apigateway.JsonSchemaType.NUMBER },
+          Description: { type: apigateway.JsonSchemaType.STRING }
         },
       }
     });
@@ -148,66 +161,50 @@ export class DistributiveSystemAssignment1Stack extends cdk.Stack {
 
     booksEndpoint.addMethod(
       "POST",
-      new apigateway.LambdaIntegration(addBooksFn, {proxy: true}), {
-        "apiKeyRequired": true,
-        requestModels: {
-          "application/json": bookCreateModel,
-        },
-        requestValidatorOptions: {
-          validateRequestBody: true
-        }
+      new apigateway.LambdaIntegration(addBooksFn, { proxy: true }), {
+      "apiKeyRequired": true,
+      requestModels: {
+        "application/json": bookCreateModel,
+      },
+      requestValidatorOptions: {
+        validateRequestBody: true
       }
+    }
     );
 
     genreEndpoint.addMethod(
       "GET",
-      new apigateway.LambdaIntegration(getBooksByGenreFn, {proxy: true})
+      new apigateway.LambdaIntegration(getBooksByGenreFn, { proxy: true })
     );
 
     isbnEndpoint.addMethod(
       "PUT",
-      new apigateway.LambdaIntegration(updateBooksFn, {proxy: true}), {
-        "apiKeyRequired": true,
-        requestModels: {
-          "application/json": bookUpdateModel,
-        },
-        requestValidatorOptions: {
-          validateRequestBody: true
+      new apigateway.LambdaIntegration(updateBooksFn, { proxy: true }), {
+      "apiKeyRequired": true,
+      requestModels: {
+        "application/json": bookUpdateModel,
+      },
+      requestValidatorOptions: {
+        validateRequestBody: true
+      }
+    }
+    );
+    // translation endpoint and connected to lambda
+    const translationEndpoint = isbnEndpoint.addResource("translation");
+
+    translationEndpoint.addMethod(
+      "GET",
+      new apigateway.LambdaIntegration(translateBookFn, { proxy: true }),
+      {
+        requestParameters: {
+          'method.request.querystring.language': true,
         }
       }
     );
 
-    new cdk.CfnOutput(this, 'BookApiKeyId', {
-      value: bookApiKey.keyId,
-      description: 'ID of the API key for accessing book endpoints',
+    new cdk.CfnOutput(this, 'ApiUrl', {
+      value: apiGW.url,
+      description: 'URL of the API Gateway',
     });
   }
 }
-
-//     // const translateBookLambda = new lambdanode.NodejsFunction(this, 'TranslateBookLambda', {
-//     //   entry: path.join(__dirname, '../lambdas/translateBook.ts'),
-//     //   handler: 'handler',
-//     //   environment: { TABLE_NAME: booksTable.tableName, REGION: this.region },
-//     // });
-
-//     // // granting permissions
-//     // booksTable.grantReadWriteData(addBookLambda);
-//      booksTable.grantReadData(getBooksLambda);
-//     // booksTable.grantReadWriteData(updateBookLambda);
-//     // booksTable.grantReadWriteData(translateBookLambda);
-//     // translateBookLambda.addToRolePolicy(new iam.PolicyStatement({
-//     //   actions: ['translate:TranslateText'],
-//     //   resources: ['*'],
-//     // }));
-
-
-//     //api gateway implementation 
-
-
-//     // bookResource.addMethod('PUT', new apigateway.LambdaIntegration(updateBookLambda), {
-//     //   apiKeyRequired: true,
-//     // });
-//     // translationResource.addMethod('GET', new apigateway.LambdaIntegration(translateBookLambda), {
-//     //   requestParameters: { 'method.request.querystring.language': true },
-//     // });
-
