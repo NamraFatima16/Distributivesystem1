@@ -1,36 +1,36 @@
-import { Handler } from "aws-lambda";
+import { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import { TranslateClient, TranslateTextCommand } from "@aws-sdk/client-translate";
 import { ReturnValue } from "@aws-sdk/client-dynamodb";
-import { StringDefinitionBody } from "aws-cdk-lib/aws-stepfunctions";
+import { TranslateClient, TranslateTextCommand } from "@aws-sdk/client-translate";
 
 const ddbDocClient = createDDbDocClient();
 const translateClient = new TranslateClient({ region: process.env.REGION });
 
-export const handler: Handler = async (event, context) => {
-  let language: string | undefined; // Declare language outside try block
-
+export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
+  console.log("[EVENT]", JSON.stringify(event));
+  let language: string | undefined;
+  
   try {
     console.log("Translating book description. Event: ", JSON.stringify(event));
-    const author = event.pathParameters?.author;
-    const isbn = event.pathParameters?.isbn;
-    language = event.queryStringParameters?.language; // Assign language here
+    const genre = event.pathParameters?.genre;
+    const isbn = event.pathParameters?.ISBN;
+    language = event.queryStringParameters?.language;
 
-    if (!author || !isbn || !language) {
+    if (!genre || !isbn || !language) {
       return {
         statusCode: 400,
         headers: {
           "content-type": "application/json",
         },
-        body: JSON.stringify({ Message: "Missing author, isbn, or language parameters." }),
+        body: JSON.stringify({ Message: "Missing genre, ISBN, or language parameters." }),
       };
     }
 
     const getCommandOutput = await ddbDocClient.send(
       new GetCommand({
         TableName: process.env.TABLE_NAME,
-        Key: { Author: author, ISBN: isbn },
+        Key: { Genre: genre, ISBN: isbn },
       })
     );
 
@@ -65,24 +65,19 @@ export const handler: Handler = async (event, context) => {
       const translateOutput = await translateClient.send(translateCommand);
       translatedText = translateOutput.TranslatedText;
 
-
- 
-
       const updateParams = {
         TableName: process.env.TABLE_NAME as string,
         Key: {
-          Author: author as string,
+          Genre: genre as string,
           ISBN: isbn as string,
         },
         UpdateExpression: "SET TranslatedDescriptions.#lang = :translatedText",
         ExpressionAttributeNames: { "#lang": language },
         ExpressionAttributeValues: { ":translatedText": translatedText },
-        ReturnValues: ReturnValue.UPDATED_NEW,
+        ReturnValues: ReturnValue.ALL_NEW,
       };
 
       await ddbDocClient.send(new UpdateCommand(updateParams));
-    
-
       console.log(`Translation added to cache for ${language}.`);
     }
 
